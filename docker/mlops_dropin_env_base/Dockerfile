@@ -1,14 +1,13 @@
 # This is the default base image for use with user models and workflows.
 FROM datarobot/jre-dropin-env-base
 
-ARG MLOPS_WHEEL_FILEPATH=datarobot_mlops-8.0.6-py2.py3-none-any.whl
-
 # Install the list of core requirements, e.g. sklearn, numpy, pandas, flask.
 # **Don't modify this file!**
 COPY dr_requirements.txt dr_requirements.txt
-COPY ${MLOPS_WHEEL_FILEPATH} ${MLOPS_WHEEL_FILEPATH}
 
 # '--upgrade-strategy eager' will upgrade installed dependencies
 # according to package requirements or to the latest
-RUN pip3 install -U --upgrade-strategy eager --no-cache-dir -r dr_requirements.txt  && \
+RUN pip3 install -U --upgrade-strategy eager --no-cache-dir \
+    -i https://artifactory.int.datarobot.com/artifactory/api/pypi/python-all/simple \
+    -r dr_requirements.txt  && \
     rm -rf dr_requirements.txt ${MLOPS_WHEEL_FILEPATH}
