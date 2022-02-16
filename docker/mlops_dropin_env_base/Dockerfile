@@ -1,5 +1,5 @@
 # This is the default base image for use with user models and workflows.
-FROM datarobot/jre-dropin-env-base
+FROM datarobot/dropin-env-base
 
 # Install the list of core requirements, e.g. sklearn, numpy, pandas, flask.
 # **Don't modify this file!**
