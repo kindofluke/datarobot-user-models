@@ -8,6 +8,5 @@ COPY dr_requirements.txt dr_requirements.txt
 # '--upgrade-strategy eager' will upgrade installed dependencies
 # according to package requirements or to the latest
 RUN pip3 install -U --upgrade-strategy eager --no-cache-dir \
-    -i https://artifactory.int.datarobot.com/artifactory/api/pypi/python-all/simple \
     -r dr_requirements.txt  && \
     rm -rf dr_requirements.txt ${MLOPS_WHEEL_FILEPATH}
