@@ -37,18 +37,43 @@ def test_predict_with_csv():
     
     # Create a simple CSV with a query
     csv_content = "query\nrandom forest"
-    files = {"X": ("query.csv", io.StringIO(csv_content), "text/csv")}
+    print(f"CSV content: {csv_content}")
     
-    response = requests.post(
+    # Try with different file upload methods
+    
+    # Method 1: Simple string in files dict (like your client)
+    print("\nTesting Method 1: Simple string in files dict")
+    response1 = requests.post(
         f"{BASE_URL}/predict",
-        files=files
+        files={"X": csv_content}
     )
+    print(f"Status Code: {response1.status_code}")
+    print(f"Response: {response1.text}")
     
-    print(f"Status Code: {response.status_code}")
-    try:
-        print(f"Response: {json.dumps(response.json(), indent=2)}")
-    except:
-        print(f"Response: {response.text}")
+    # Method 2: File-like object with filename and mimetype
+    print("\nTesting Method 2: File-like object with filename")
+    from io import StringIO
+    file_obj = StringIO(csv_content)
+    response2 = requests.post(
+        f"{BASE_URL}/predict",
+        files={"X": ("query.csv", file_obj, "text/csv")}
+    )
+    print(f"Status Code: {response2.status_code}")
+    print(f"Response: {response2.text}")
+    
+    # Method 3: Send as data with proper content-type
+    print("\nTesting Method 3: Raw data with content-type")
+    response3 = requests.post(
+        f"{BASE_URL}/predict",
+        data=csv_content,
+        headers={"Content-Type": "text/csv"}
+    )
+    print(f"Status Code: {response3.status_code}")
+    print(f"Response: {response3.text}")
+    
+    # Test if any method worked
+    assert any(r.status_code == 200 for r in [response1, response2, response3]), \
+        "All methods failed to get a 200 response"
 
 def test_predict_unstructured():
     """Test the /predictUnstructured endpoint"""
@@ -138,10 +163,10 @@ if __name__ == "__main__":
     
     # Run all tests
     test_root_endpoint()
-    test_predict_endpoint()
-    # test_predict_with_csv()
+    # test_predict_endpoint()
+    test_predict_with_csv()
     # test_predict_unstructured()
-    # test_chat_completions()
-    # test_tools_call()
+    test_chat_completions()
+    test_tools_call()
     
     print("\nAll tests completed!")
