@@ -87,67 +87,66 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.post(f"{URL_PREFIX}/predict/")
+@app.post(f"{URL_PREFIX}/predict")
 async def predict(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
-    file_key = "X"  
-    binary_data = None
-    mimetype = None
-    charset = None
-    
-    content_type = request.headers.get("content-type", "")
-    print(request.__dict__)
-    
     try:
+        content_type = request.headers.get("content-type", "")
+        
         if "multipart/form-data" in content_type:
-            # Handle multipart form-data with CSV file
             form = await request.form()
-            print(form)
-            file = None
-            for key, value in form.items():
-                if key == file_key and isinstance(value, UploadFile):
-                    file = value
-                    break
+            print(f"Form data: {form}")
             
-            if file:
-                binary_data = await file.read()
-                text = binary_data.decode("utf-8")
-                print(f"Successfully read {len(text)} characters from file")
-            else:
-                raise ValueError(f"No file found with key '{file_key}' in form data")
+            # Get X data from form, whether it's a file or string
+            if "X" in form:
+                form_item = form["X"]
                 
-        elif "text/plain" in content_type or "text/csv" in content_type or "application/octet-stream" in content_type:
-            # Handle direct binary data similar to Flask code
-            binary_data = await request.body()
-            mimetype, charset = validate_content_type_header(request.headers.get("content-type"))
+                # Check if it's a file or string
+                if isinstance(form_item, UploadFile):
+                    print("Processing X as UploadFile")
+                    content = await form_item.read()
+                    text = content.decode("utf-8")
+                else:
+                    # It's a string sent directly
+                    print("Processing X as string")
+                    text = str(form_item)
+            else:
+                raise ValueError("No 'X' key found in form data")
+                
+        elif "text/plain" in content_type or "text/csv" in content_type:
+            content = await request.body()
+            text = content.decode("utf-8")
         else:
             raise ValueError(f"Unsupported content type: {content_type}")
+        
+        # Process the text data
+        if text:
+            # Handle CSV content
+            print(f"CSV content: {text[:100]}...")  # Print first 100 chars
             
-        # If we have binary data, process it
-        if binary_data:
-            # Decode the binary data based on mime type
-            if mimetype in ["text/csv", "text/plain"]:
-                encoding = charset or "utf-8"
-                text = binary_data.decode(encoding)
-                # Split if it's a multi-line CSV
-                text_lines = [line.strip() for line in text.split("\n") if line.strip()]
-                
-                results_for_all_queries = []
-                for query in text_lines:
-                    results = retriever.get_relevant_docs(query)
+            # Split into lines, handling empty lines
+            lines = [line.strip() for line in text.split("\n") if line.strip()]
+            
+            results_for_all_queries = []
+            for query in lines[1:]:  # Skip header row
+                # Split CSV row into columns
+                parts = query.split(',')
+                if len(parts) > 0:
+                    # Use the first column as the query (or customize as needed)
+                    query_text = parts[0]
+                    results = retriever.get_relevant_docs(query_text)
                     results_for_all_queries.append(results)
-                    
-                return {"relevant": results_for_all_queries}
-            else:
-                raise ValueError(f"Unsupported mime type: {mimetype}")
-        else:
-            raise ValueError("No binary data provided in the request")
             
+            return {"relevant": results_for_all_queries}
+        else:
+            raise ValueError("No text content found")
+    
     except Exception as e:
-        # Log the error and return a 400 response
-        print(f"Error processing request: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Bad request: {str(e)}")
+        import traceback
+        print(f"Error in predict: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=400, detail=str(e))
+    
 
-# Helper functions from your Flask code
 def resolve_mimetype_by_filename(filename):
     if filename.endswith('.csv'):
         return "text/csv"
