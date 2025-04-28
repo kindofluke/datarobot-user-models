@@ -23,7 +23,7 @@ custom_model = dr.CustomModel(
     target_type="TextGeneration",
     target_name="relevant",
     use_case_ids=[use_case.id],
-    resource_bundle_id="cpu.3xlarge"" # need boosted memory for ONNX model
+    resource_bundle_id="cpu.3xlarge" # need boosted memory for ONNX model
 )
 
 registered_model = dr.RegisteredModel("FastAPI Text Generation VDB",
