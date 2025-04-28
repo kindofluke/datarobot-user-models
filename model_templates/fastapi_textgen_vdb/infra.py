@@ -24,10 +24,10 @@ custom_model = dr.CustomModel(
     folder_path=".",
     # For Unstructured models, the model type must be set to "unstructured"
     # This model also works with TextGen models uncomment the two lines below 
-    target_type="unstructured",
-
-    # target_type="TextGeneration",
+    target_type="Unstructured",
     # target_name="relevant",
+    # target_type="TextGeneration",
+
     use_case_ids=[use_case.id],
     resource_bundle_id="cpu.3xlarge" # need boosted memory for ONNX model
 )
