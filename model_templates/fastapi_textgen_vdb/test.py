@@ -37,7 +37,7 @@ def test_predict_with_csv():
     
     # Create a simple CSV with a query
     csv_content = "query\nrandom forest"
-    files = {"file": ("query.csv", io.StringIO(csv_content), "text/csv")}
+    files = {"X": ("query.csv", io.StringIO(csv_content), "text/csv")}
     
     response = requests.post(
         f"{BASE_URL}/predict",

@@ -9,7 +9,7 @@ import chromadb
 import numpy as np
 import onnxruntime as ort
 import uvicorn
-from fastapi import Depends, FastAPI, File, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from models import TextContent, ToolCallRequest, ToolCallResponse, ToolCallResult
 from transformers import AutoTokenizer
 
@@ -80,7 +80,7 @@ class RetrieverWorker:
         
         return formatted_results
 
-app = FastAPI()
+app = FastAPI(trailing_slash=False)
 
 @app.get(f"{URL_PREFIX}/")
 async def root():
@@ -89,34 +89,78 @@ async def root():
 
 @app.post(f"{URL_PREFIX}/predict")
 async def predict(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
+    file_key = "X"  
+    binary_data = None
+    mimetype = None
+    charset = None
+    
     content_type = request.headers.get("content-type", "")
+    
+    try:
+        if "multipart/form-data" in content_type:
+            # Handle multipart form-data with CSV file
+            form = await request.form()
+            file = form.get(file_key)
+            
+            if file and isinstance(file, UploadFile):
+                binary_data = await file.read()
+                mimetype = resolve_mimetype_by_filename(file.filename)
+                print(f"Filename provided under {file_key} key: {file.filename}")
+            else:
+                raise ValueError(f"No file found with key '{file_key}' in form data")
+                
+        elif "text/plain" in content_type or "text/csv" in content_type or "application/octet-stream" in content_type:
+            # Handle direct binary data similar to Flask code
+            binary_data = await request.body()
+            mimetype, charset = validate_content_type_header(request.headers.get("content-type"))
+        else:
+            raise ValueError(f"Unsupported content type: {content_type}")
+            
+        # If we have binary data, process it
+        if binary_data:
+            # Decode the binary data based on mime type
+            if mimetype in ["text/csv", "text/plain"]:
+                encoding = charset or "utf-8"
+                text = binary_data.decode(encoding)
+                # Split if it's a multi-line CSV
+                text_lines = [line.strip() for line in text.split("\n") if line.strip()]
+                
+                results_for_all_queries = []
+                for query in text_lines:
+                    results = retriever.get_relevant_docs(query)
+                    results_for_all_queries.append(results)
+                    
+                return {"relevant": results_for_all_queries}
+            else:
+                raise ValueError(f"Unsupported mime type: {mimetype}")
+        else:
+            raise ValueError("No binary data provided in the request")
+            
+    except Exception as e:
+        # Log the error and return a 400 response
+        print(f"Error processing request: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Bad request: {str(e)}")
 
-    if "multipart/form-data" in content_type:
-        # Handle multipart form-data with CSV file
-        form = await request.form()
-        file = form.get("file")
-        if file and isinstance(file, UploadFile):
-            content = await file.read()
-            text = content.decode("utf-8")
+# Helper functions from your Flask code
+def resolve_mimetype_by_filename(filename):
+    if filename.endswith('.csv'):
+        return "text/csv"
+    # Add other mime type detections as needed
+    return "application/octet-stream"
 
-    elif "text/plain" in content_type or "text/csv" in content_type:
-        # Handle text/plain or text/csv input
-        content = await request.body()
-        text = content.decode("utf-8")
-        if isinstance(text, str):
-            text = [text]
-    else:
-        raise ValueError("Unsupported content type")
-
-    if text:
-        results_for_all_queries = []
-        for query in text:
-            results = retriever.get_relevant_docs(query)
-            results_for_all_queries.append(results)
-        return {"relevant": results_for_all_queries}
-    else:
-        raise ValueError("No text provided in the request")
-
+def validate_content_type_header(content_type):
+    if not content_type:
+        return "application/octet-stream", None
+        
+    mime_type = content_type.split(';')[0].strip()
+    
+    charset = None
+    if ';' in content_type:
+        charset_part = content_type.split(';', 1)[1].strip()
+        if charset_part.startswith('charset='):
+            charset = charset_part[8:].strip()
+            
+    return mime_type, charset
 
 @app.post(f"{URL_PREFIX}/predictUnstructured")
 async def predict_unstructured(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
@@ -222,7 +266,7 @@ async def tools_call(request: ToolCallRequest, retriever: RetrieverWorker = Depe
 
         response = ToolCallResponse(
             id=request_id,
-            result=ToolCallResult(content=[TextContnt(text=text_response)], isError=False),
+            result=ToolCallResult(content=[TextContent(text=text_response)], isError=False),
         )
 
         return response

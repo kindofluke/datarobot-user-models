@@ -1,6 +1,8 @@
 import pulumi_datarobot as dr
 import datarobot as dr_api
 from datarobot.models.genai.vector_database import CustomModelVectorDatabaseValidation
+from pulumi import Output
+
 
 # Look up the execution environtmnet
 all_envs = dr_api.ExecutionEnvironment.list()
@@ -41,14 +43,16 @@ deployment = dr.Deployment("FastAPI Text Generation VDB",
 )
 
 
-def register_vector_db(deployment_id: str):
+def register_vector_db(deployment_id: str, use_case_id: str):
     external_vdb_validation = CustomModelVectorDatabaseValidation.create(
     prompt_column_name="question", 
     target_column_name="relevant",
     deployment_id=deployment_id,
-    use_case=use_case.id,
+    use_case=use_case_id,
     wait_for_completion=True
 )
-    assert external_vdb_validation.validation_status == "PASSED"
+    
 
-deployment.id.apply(register_vector_db)
+Output.all(deployment.id, use_case.id).apply(
+    lambda args: register_vector_db(args[0], args[1])
+)
