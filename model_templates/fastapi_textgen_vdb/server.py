@@ -19,6 +19,9 @@ CHROMA_COLLECTION = "sklearn"
 MODEL_DIR = "onnx"
 model_name = "prajjwal1/bert-tiny"
 
+URL_PREFIX = os.getenv("URL_PREFIX", "")
+
+
 class RetrieverWorker:
     def __init__(self, model_dir: str = "onnx", model_name: str = "prajjwal1/bert-tiny"):
         self.model_dir = model_dir
@@ -79,12 +82,12 @@ class RetrieverWorker:
 
 app = FastAPI()
 
-@app.get("/")
+@app.get(f"{URL_PREFIX}/")
 async def root():
     return {"message": "Hello World"}
 
 
-@app.post("/predict")
+@app.post(f"{URL_PREFIX}/predict")
 async def predict(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     content_type = request.headers.get("content-type", "")
 
@@ -115,7 +118,7 @@ async def predict(request: Request, retriever: RetrieverWorker = Depends(Retriev
         raise ValueError("No text provided in the request")
 
 
-@app.post("/predictUnstructured")
+@app.post(f"{URL_PREFIX}/predictUnstructured")
 async def predict_unstructured(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     content_type = request.headers.get("content-type", "")
 
@@ -153,7 +156,7 @@ async def predict_unstructured(request: Request, retriever: RetrieverWorker = De
     return retriever.get_relevant_docs(query)
 
 
-@app.post("/chat/completions")
+@app.post(f"{URL_PREFIX}/chat/completions")
 async def chat_completions(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     try:
         # Parse the request body
@@ -203,7 +206,7 @@ async def chat_completions(request: Request, retriever: RetrieverWorker = Depend
         return {"error": str(e)}
 
 
-@app.post("/tools/call", response_model=ToolCallResponse)
+@app.post(f"{URL_PREFIX}/tools/call", response_model=ToolCallResponse)
 async def tools_call(request: ToolCallRequest, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     """
     Handle searches in an MCP tool call style. This
