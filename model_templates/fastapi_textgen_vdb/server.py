@@ -6,7 +6,6 @@ import json
 import time
 import uuid
 import chromadb
-import faiss
 from fastapi import FastAPI, File, UploadFile, Request, Depends
 import uvicorn
 from transformers import AutoTokenizer, AutoModel
