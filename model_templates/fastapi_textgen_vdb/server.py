@@ -5,6 +5,7 @@ from typing import List, Optional, Annotated
 import json
 import time
 import uuid
+import chromadb
 import faiss
 from fastapi import FastAPI, File, UploadFile, Request, Depends
 import uvicorn
@@ -14,9 +15,13 @@ from sklearn.utils.discovery import all_estimators
 from models import ToolCallRequest, TextContent, ToolCallResult, ToolCallResponse
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-INDEX_PATH = "sklearn_docs.index"
+
+CHROMA_PATH = "./chroma_db"
+CHROMA_COLLECTION = "sklearn"
 
 MODEL_DIR = "embedding_model"
 model_name = "prajjwal1/bert-tiny"
@@ -26,17 +31,6 @@ class RetrieverWorker:
         self.model_dir = model_dir
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_dir)
         self.model = AutoModel.from_pretrained(model_name, cache_dir=model_dir).cpu()
-        self.index = faiss.read_index(INDEX_PATH)
-        self.docstrings = []
-        self.class_names = []
-        estimators = all_estimators()
-        for name, estimator in estimators:
-            # Check if it's actually an estimator (has fit method)
-            if hasattr(estimator, 'fit') and inspect.isclass(estimator):
-                doc = estimator.__doc__
-                if doc is not None and len(doc.strip()) > 0:
-                    self.docstrings.append(doc)
-                    self.class_names.append(name)
 
     def get_relevant_docs(self, query: str):
         encoded_input = self.tokenizer(
@@ -47,21 +41,27 @@ class RetrieverWorker:
             model_output = self.model(**encoded_input)
 
         token_embeddings = model_output[0]
-        input_mask_expanded = (
-            encoded_input["attention_mask"].unsqueeze(-1).expand(token_embeddings.size()).float()
-        )
-        query_embedding = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
-            input_mask_expanded.sum(1), min=1e-9
-        )
-        query_embedding = query_embedding.detach().cpu().numpy()
+        input_mask_expanded = encoded_input['attention_mask'].unsqueeze(-1).expand(token_embeddings.size()).float()
+        query_embedding = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+        query_embedding = query_embedding.numpy()
 
+        client = chromadb.PersistentClient(path=CHROMA_PATH)
+        collection_name = CHROMA_COLLECTION
+
+        collection = client.get_collection(collection_name)
         k = 3  # Return top 3 results
-        results = []
-        distances, indices = self.index.search(query_embedding, k)
-        print(f"\nTop {k} results for query: '{query}'")
-        for i, (idx, distance) in enumerate(zip(indices[0], distances[0])):
-            result = f"""{self.class_names[idx]} (Distance: {distance:.4f}) \n
-            {self.docstrings[idx][:150]}"""
+        results = collection.query(
+            query_embeddings=query_embedding.tolist(),
+            n_results=k
+        )
+        for i in range(len(results['ids'][0])):
+            doc_id = results['ids'][0][i]
+            distance = results['distances'][0][i]
+            document = results['documents'][0][i]
+
+            class_name = doc_id.split("_")[0]
+            result = f"""{class_name} (Distance: {distance:.4f}) \n
+            {document[:150]}"""
             results.append(result)
         return results
 
