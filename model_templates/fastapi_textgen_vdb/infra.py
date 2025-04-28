@@ -22,8 +22,12 @@ custom_model = dr.CustomModel(
     description="FastAPI Text Generation Model with Vector DB",
     language="python",
     folder_path=".",
-    target_type="TextGeneration",
-    target_name="relevant",
+    # For Unstructured models, the model type must be set to "unstructured"
+    # This model also works with TextGen models uncomment the two lines below 
+    target_type="unstructured",
+
+    # target_type="TextGeneration",
+    # target_name="relevant",
     use_case_ids=[use_case.id],
     resource_bundle_id="cpu.3xlarge" # need boosted memory for ONNX model
 )
@@ -39,6 +43,8 @@ deployment = dr.Deployment("FastAPI Text Generation VDB",
         prediction_environment_id=prediction_environment.id,
         registered_model_version_id=registered_model.version_id,
         use_case_ids=[use_case.id],
+        predictions_data_collection_settings={"enabled": True}
+        
         # description="FastAPI Text Generation Model with Vector DB",
 )
 

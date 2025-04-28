@@ -9,9 +9,12 @@ import chromadb
 import numpy as np
 import onnxruntime as ort
 import uvicorn
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request
 from models import TextContent, ToolCallRequest, ToolCallResponse, ToolCallResult
 from transformers import AutoTokenizer
+from starlette.datastructures import UploadFile
+import logging
+logger = logging.getLogger(__name__)
 
 CHROMA_PATH = "./chroma_db"
 CHROMA_COLLECTION = "sklearn"
@@ -87,27 +90,22 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.post(f"{URL_PREFIX}/predict")
+@app.post(f"{URL_PREFIX}/predict/")
 async def predict(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     try:
         content_type = request.headers.get("content-type", "")
         
         if "multipart/form-data" in content_type:
             form = await request.form()
-            print(f"Form data: {form}")
             
             # Get X data from form, whether it's a file or string
             if "X" in form:
                 form_item = form["X"]
-                
-                # Check if it's a file or string
                 if isinstance(form_item, UploadFile):
-                    print("Processing X as UploadFile")
+                    logger.info("Processing X as UploadFile")
                     content = await form_item.read()
                     text = content.decode("utf-8")
                 else:
-                    # It's a string sent directly
-                    print("Processing X as string")
                     text = str(form_item)
             else:
                 raise ValueError("No 'X' key found in form data")
@@ -135,8 +133,11 @@ async def predict(request: Request, retriever: RetrieverWorker = Depends(Retriev
                     query_text = parts[0]
                     results = retriever.get_relevant_docs(query_text)
                     results_for_all_queries.append(results)
-            
-            return {"relevant": results_for_all_queries}
+            raw_results_list = results_for_all_queries[0]
+            results =  {"predictions": [
+              f'''The relevant chunks are: {"--".join(raw_results_list)}''' ]}
+            logger.info(f"Results: {results}")
+            return results
         else:
             raise ValueError("No text content found")
     
@@ -205,7 +206,7 @@ async def predict_unstructured(request: Request, retriever: RetrieverWorker = De
     return retriever.get_relevant_docs(query)
 
 
-@app.post(f"{URL_PREFIX}/chat/completions")
+@app.post(f"{URL_PREFIX}/chat/completions/")
 async def chat_completions(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     try:
         # Parse the request body
