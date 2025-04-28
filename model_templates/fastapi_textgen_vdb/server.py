@@ -203,7 +203,9 @@ async def predict_unstructured(request: Request, retriever: RetrieverWorker = De
     if len(text) != 1:
         raise ValueError("Only one text input is allowed")
     query = text[0]
-    return retriever.get_relevant_docs(query)
+    results = retriever.get_relevant_docs(query)
+    logger.info(f"Results: {results}")
+    return results
 
 
 @app.post(f"{URL_PREFIX}/chat/completions/")
