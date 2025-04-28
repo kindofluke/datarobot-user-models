@@ -1,0 +1,9 @@
+name: fastapi_textgen_vdb
+description: Fast API Example Model for DataRobot
+main: infra.py
+runtime:
+  name: python
+  options:
+    toolchain: pip
+config:
+  datarobot:tracecontext: datarobot-drum
