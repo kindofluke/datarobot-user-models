@@ -1,68 +1,81 @@
 import csv
-import inspect
 import io
-from typing import List, Optional, Annotated
 import json
+import os
 import time
 import uuid
+
 import chromadb
-from fastapi import FastAPI, File, UploadFile, Request, Depends
+import numpy as np
+import onnxruntime as ort
 import uvicorn
-from transformers import AutoTokenizer, AutoModel
-import torch
-from sklearn.utils.discovery import all_estimators
-from models import ToolCallRequest, TextContent, ToolCallResult, ToolCallResponse
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-
+from fastapi import Depends, FastAPI, File, Request, UploadFile
+from models import TextContent, ToolCallRequest, ToolCallResponse, ToolCallResult
+from transformers import AutoTokenizer
 
 CHROMA_PATH = "./chroma_db"
 CHROMA_COLLECTION = "sklearn"
 
-MODEL_DIR = "embedding_model"
+MODEL_DIR = "onnx"
 model_name = "prajjwal1/bert-tiny"
 
 class RetrieverWorker:
-    def __init__(self, model_dir: str = "embedding_model", model_name: str = "prajjwal1/bert-tiny"):
+    def __init__(self, model_dir: str = "onnx", model_name: str = "prajjwal1/bert-tiny"):
         self.model_dir = model_dir
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=model_dir)
-        self.model = AutoModel.from_pretrained(model_name, cache_dir=model_dir).cpu()
+        
+        # Load the ONNX model
+        model_path = os.path.join(model_dir, "model.onnx")
+        self.session = ort.InferenceSession(model_path)
+        
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
+        
+        self.input_names = [input.name for input in self.session.get_inputs()]
+        self.output_names = [output.name for output in self.session.get_outputs()]
 
     def get_relevant_docs(self, query: str):
         encoded_input = self.tokenizer(
-            [query], padding=True, truncation=True, max_length=256, return_tensors="pt"
+            [query], padding=True, truncation=True, max_length=256, return_tensors="np"
         )
-        device = torch.device("cpu")
-        with torch.no_grad():
-            model_output = self.model(**encoded_input)
+        onnx_inputs = {}
+        for key, value in encoded_input.items():
+            if key in self.input_names:
+                onnx_inputs[key] = value
 
-        token_embeddings = model_output[0]
-        input_mask_expanded = encoded_input['attention_mask'].unsqueeze(-1).expand(token_embeddings.size()).float()
-        query_embedding = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-        query_embedding = query_embedding.numpy()
+        outputs = self.session.run(self.output_names, onnx_inputs)
+        
+        token_embeddings = outputs[0]
+        
+   
+        attention_mask = encoded_input['attention_mask']
+        input_mask_expanded = np.expand_dims(attention_mask, axis=-1)
+        sum_embeddings = np.sum(token_embeddings * input_mask_expanded, axis=1)
+        sum_mask = np.sum(input_mask_expanded, axis=1)
+        query_embedding = sum_embeddings / np.clip(sum_mask, a_min=1e-9, a_max=None)
+        
 
         client = chromadb.PersistentClient(path=CHROMA_PATH)
         collection_name = CHROMA_COLLECTION
-
+        
         collection = client.get_collection(collection_name)
         k = 3  # Return top 3 results
         results = collection.query(
             query_embeddings=query_embedding.tolist(),
             n_results=k
         )
+        
+        formatted_results = []
         for i in range(len(results['ids'][0])):
             doc_id = results['ids'][0][i]
             distance = results['distances'][0][i]
             document = results['documents'][0][i]
-
+            
             class_name = doc_id.split("_")[0]
             result = f"""{class_name} (Distance: {distance:.4f}) \n
             {document[:150]}"""
-            results.append(result)
-        return results
+            formatted_results.append(result)
+        
+        return formatted_results
 
 app = FastAPI()
 
@@ -206,7 +219,7 @@ async def tools_call(request: ToolCallRequest, retriever: RetrieverWorker = Depe
 
         response = ToolCallResponse(
             id=request_id,
-            result=ToolCallResult(content=[TextContent(text=text_response)], isError=False),
+            result=ToolCallResult(content=[TextContnt(text=text_response)], isError=False),
         )
 
         return response
@@ -237,4 +250,4 @@ def process_csv_content(text):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="trace")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
