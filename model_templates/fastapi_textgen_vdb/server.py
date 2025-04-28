@@ -95,17 +95,23 @@ async def predict(request: Request, retriever: RetrieverWorker = Depends(Retriev
     charset = None
     
     content_type = request.headers.get("content-type", "")
+    print(request.__dict__)
     
     try:
         if "multipart/form-data" in content_type:
             # Handle multipart form-data with CSV file
             form = await request.form()
-            file = form.get(file_key)
+            print(form)
+            file = None
+            for key, value in form.items():
+                if key == file_key and isinstance(value, UploadFile):
+                    file = value
+                    break
             
-            if file and isinstance(file, UploadFile):
+            if file:
                 binary_data = await file.read()
-                mimetype = resolve_mimetype_by_filename(file.filename)
-                print(f"Filename provided under {file_key} key: {file.filename}")
+                text = binary_data.decode("utf-8")
+                print(f"Successfully read {len(text)} characters from file")
             else:
                 raise ValueError(f"No file found with key '{file_key}' in form data")
                 
