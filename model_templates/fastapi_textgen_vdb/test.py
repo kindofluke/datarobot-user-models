@@ -10,7 +10,7 @@ def test_root_endpoint():
     print("\n=== Testing Root Endpoint ===")
     response = requests.get(f"{BASE_URL}/")
     print(f"Status Code: {response.status_code}")
-    print(f"Response: {response.json()}")
+    print(f"Response: {response.text}")
 
 def test_predict_endpoint():
     """Test the /predict endpoint with text data"""
