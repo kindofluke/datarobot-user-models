@@ -87,7 +87,7 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.post(f"{URL_PREFIX}/predict")
+@app.post(f"{URL_PREFIX}/predict/")
 async def predict(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     file_key = "X"  
     binary_data = None
@@ -162,7 +162,7 @@ def validate_content_type_header(content_type):
             
     return mime_type, charset
 
-@app.post(f"{URL_PREFIX}/predictUnstructured")
+@app.post(f"{URL_PREFIX}/predictUnstructured/")
 async def predict_unstructured(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     content_type = request.headers.get("content-type", "")
 
@@ -297,4 +297,4 @@ def process_csv_content(text):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="trace")
