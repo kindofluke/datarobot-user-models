@@ -51,6 +51,7 @@ def register_vector_db(deployment_id: str, use_case_id: str):
     use_case=use_case_id,
     wait_for_completion=True
 )
+    print(external_vdb_validation.__dict__)
     
 
 Output.all(deployment.id, use_case.id).apply(
