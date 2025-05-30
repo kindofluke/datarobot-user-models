@@ -17,8 +17,6 @@ This template demonstrates how to build a FastAPI application that:
 - **`/`**: Simple root endpoint for health checks. This is technically the only endpoint that is "required"
 
 
-
-
 ### Additional DataRobot Endpoints
 
 - **`/predict`**: Processes structured prediction requests with CSV data

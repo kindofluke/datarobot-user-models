@@ -169,9 +169,12 @@ def validate_content_type_header(content_type):
     return mime_type, charset
 
 @app.post(f"{URL_PREFIX}/predictUnstructured/")
+@app.post(f"{URL_PREFIX}/predictionsUnstructured/")
 async def predict_unstructured(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
     content_type = request.headers.get("content-type", "")
-
+    print(f"Content-Type: {content_type}")
+    print(f"The request body is: {await request.body()}")
+    print(f"The request headers are: {request.headers}")
     if "multipart/form-data" in content_type:
         # Handle multipart form-data with CSV file
         form = await request.form()
@@ -180,33 +183,35 @@ async def predict_unstructured(request: Request, retriever: RetrieverWorker = De
             content = await file.read()
             text = content.decode("utf-8")
 
-    elif "text/plain" in content_type or "text/csv" in content_type:
-        # Handle text/plain or text/csv input
+    else:
+        # Try to parse content as JSON first, regardless of content-type
         content = await request.body()
         text = content.decode("utf-8")
-
-    elif "application/json" in content_type:
-        # Handle JSON input
-        content = await request.body()
+        
         try:
-            data = json.loads(content)
-            if isinstance(data, list):
-                text = [
-                    str(item) for item in data if item
-                ]  # Convert all items to strings and filter empty items
+            data = json.loads(text)
+            if isinstance(data, dict) and "question" in data:
+                query = data["question"]
             else:
-                return ValueError("Invalid JSON format")
+                raise ValueError("Invalid JSON format: missing 'question' field")
         except json.JSONDecodeError:
-            return ValueError("Invalid JSON format")
-    else:
-        return ValueError("Unsupported content type")
-    if len(text) != 1:
-        raise ValueError("Only one text input is allowed")
-    query = text[0]
+            # If JSON parsing fails and content-type is not multipart, treat as plain text
+            if not "multipart/form-data" in content_type:
+                raise ValueError("Invalid input format: expected JSON with 'question' field")
+            else:
+                raise ValueError("Unsupported content type")
+
     results = retriever.get_relevant_docs(query)
     logger.info(f"Results: {results}")
-    return results
+    return {"relevant": results}
 
+
+@app.get(f"{URL_PREFIX}/docs/")
+async def get_docs():
+    return f'''
+    <html><body><h1>Hello World</h1>{URL_PREFIX}</body></html>
+
+    '''
 
 @app.post(f"{URL_PREFIX}/chat/completions/")
 async def chat_completions(request: Request, retriever: RetrieverWorker = Depends(RetrieverWorker)):
@@ -305,4 +310,4 @@ def process_csv_content(text):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="trace")
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="debug")
